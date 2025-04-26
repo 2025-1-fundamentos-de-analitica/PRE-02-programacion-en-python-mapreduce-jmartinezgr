@@ -4,7 +4,8 @@
 
 import fileinput
 import glob
-import os.path
+import os
+import shutil
 import time
 from itertools import groupby
 
@@ -18,7 +19,17 @@ from itertools import groupby
 # text0_2.txt, etc.
 #
 def copy_raw_files_to_input_folder(n):
-    """Funcion copy_files"""
+    """Función que copia n veces cada archivo en files/raw a files/input"""
+    raw_folder = "files/raw"
+    input_folder = "files/input"
+    os.makedirs(input_folder, exist_ok=True)
+
+    for filepath in glob.glob(os.path.join(raw_folder, "*.txt")):
+        filename = os.path.basename(filepath)
+        for i in range(1, n + 1):
+            new_filename = f"{filename.rsplit('.', 1)[0]}_{i}.txt"
+            new_path = os.path.join(input_folder, new_filename)
+            shutil.copy(filepath, new_path)
 
 
 #
@@ -37,7 +48,13 @@ def copy_raw_files_to_input_folder(n):
 #   ]
 #
 def load_input(input_directory):
-    """Funcion load_input"""
+    """Lee todos los archivos de un directorio y devuelve lista de tuplas (filename, line)"""
+    sequence = []
+    files = glob.glob(f"{input_directory}/*")
+    with fileinput.input(files=files) as f:
+        for line in f:
+            sequence.append((fileinput.filename(), line))
+    return sequence
 
 
 #
@@ -46,7 +63,16 @@ def load_input(input_directory):
 # realiza el preprocesamiento de las líneas de texto,
 #
 def line_preprocessing(sequence):
-    """Line Preprocessing"""
+    """Preprocesa las líneas: convierte a minúsculas y elimina caracteres no alfabéticos"""
+    import re
+
+    processed = []
+    for filename, line in sequence:
+        # Convertimos a minúscula y separamos por palabras alfabéticas
+        words = re.findall(r"\b\w+\b", line.lower())
+        for word in words:
+            processed.append((filename, word))
+    return processed
 
 
 #
@@ -62,7 +88,8 @@ def line_preprocessing(sequence):
 #   ]
 #
 def mapper(sequence):
-    """Mapper"""
+    """Convierte tuplas (archivo, palabra) en (palabra, 1)"""
+    return [(word, 1) for _, word in sequence]
 
 
 #
@@ -77,7 +104,8 @@ def mapper(sequence):
 #   ]
 #
 def shuffle_and_sort(sequence):
-    """Shuffle and Sort"""
+    """Ordena las tuplas por la clave (palabra)"""
+    return sorted(sequence, key=lambda x: x[0])
 
 
 #
@@ -87,7 +115,12 @@ def shuffle_and_sort(sequence):
 # texto.
 #
 def reducer(sequence):
-    """Reducer"""
+    """Agrupa las palabras y suma los valores"""
+    reduced = []
+    for key, group in groupby(sequence, key=lambda x: x[0]):
+        total = sum(value for _, value in group)
+        reduced.append((key, total))
+    return reduced
 
 
 #
@@ -95,7 +128,10 @@ def reducer(sequence):
 # directorio y lo crea. Si el directorio existe, lo borra
 #
 def create_ouptput_directory(output_directory):
-    """Create Output Directory"""
+    """Crea el directorio de salida, eliminándolo si ya existe"""
+    if os.path.exists(output_directory):
+        shutil.rmtree(output_directory)
+    os.makedirs(output_directory)
 
 
 #
@@ -107,7 +143,11 @@ def create_ouptput_directory(output_directory):
 # separados por un tabulador.
 #
 def save_output(output_directory, sequence):
-    """Save Output"""
+    """Guarda las tuplas en part-00000 con tabuladores"""
+    path = os.path.join(output_directory, "part-00000")
+    with open(path, "w", encoding="utf-8") as file:
+        for key, value in sequence:
+            file.write(f"{key}\t{value}\n")
 
 
 #
@@ -115,14 +155,27 @@ def save_output(output_directory, sequence):
 # entregado como parámetro.
 #
 def create_marker(output_directory):
-    """Create Marker"""
+    """Crea el archivo _SUCCESS"""
+    path = os.path.join(output_directory, "_SUCCESS")
+    with open(path, "w", encoding="utf-8"):
+        pass
 
 
 #
 # Escriba la función job, la cual orquesta las funciones anteriores.
 #
+
+
 def run_job(input_directory, output_directory):
-    """Job"""
+    """Orquesta el procesamiento de los archivos"""
+    data = load_input(input_directory)
+    preprocessed = line_preprocessing(data)
+    mapped = mapper(preprocessed)
+    shuffled = shuffle_and_sort(mapped)
+    reduced = reducer(shuffled)
+    create_ouptput_directory(output_directory)
+    save_output(output_directory, reduced)
+    create_marker(output_directory)
 
 
 if __name__ == "__main__":
